@@ -1,0 +1,20 @@
+lms-frontend/
+├── public/
+├── src/
+│   ├── components/
+│   │   ├── Navbar.jsx
+│   │   ├── CourseCard.jsx
+│   │   ├── LessonList.jsx
+│   ├── pages/
+│   │   ├── Login.jsx
+│   │   ├── Register.jsx
+│   │   ├── Dashboard.jsx
+│   │   ├── CourseDetails.jsx
+│   │   ├── Profile.jsx
+│   ├── utils/
+│   │   └── api.js
+│   ├── App.jsx
+│   └── main.jsx
+├── .env
+├── package.json
+└── tailwind.config.js (if using Tailwind)

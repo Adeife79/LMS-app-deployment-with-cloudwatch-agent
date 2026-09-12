@@ -1,0 +1,278 @@
+name: Application Deployment
+
+on:
+  workflow_dispatch
+#  workflow_run:
+#        workflows: ["Continuous Integration"]
+#        types:
+#            - completed
+#        branches:
+#            - main
+
+env:
+    AWS_REGION: eu-north-1
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        permissions:
+            contents: read
+            id-token: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v3
+            
+
+            - name: Debug GitHub OIDC claims
+              shell: bash
+              run: |
+                python3 - <<'PY'
+                import os
+                import json
+                import base64
+                import urllib.request
+
+                url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+                token = os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
+
+                req = urllib.request.Request(
+                    url + "&audience=sts.amazonaws.com",
+                    headers={"Authorization": f"bearer {token}"}
+                )
+
+                with urllib.request.urlopen(req) as response:
+                    oidc = json.load(response)
+
+                jwt = oidc["value"]
+                payload = jwt.split(".")[1]
+                payload += "=" * (-len(payload) % 4)
+
+                claims = json.loads(
+                    base64.urlsafe_b64decode(payload)
+                )
+
+                for key in ["iss", "aud", "sub", "repository", "repository_owner", "ref"]:
+                    print(f"{key}: {claims.get(key)}")
+                PY
+
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v3
+              with:
+                role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-role
+                aws-region: ${{ env.AWS_REGION }}
+
+
+            - name: Create EC2 Instance
+              run: |
+                INSTANCE_ID=$(aws ec2 run-instances \
+                  --image-id ${{ secrets.AWS_AMI_ID }} \
+                  --instance-type t3.micro \
+                  --key-name lms-key \
+                  --security-group-ids ${{ secrets.AWS_SECURITY_GROUP_ID }} \
+                  --subnet-id ${{ secrets.AWS_SUBNET_ID }} \
+                  --iam-instance-profile Name=EC2-SSM-Role \
+                  --query 'Instances[0].InstanceId' \
+                  --output text \
+                  --tag-specifications 'ResourceType=instance, Tags=[{Key=Name,Value=lms-instance}]')
+
+                echo "EC2 Instance created with ID: $INSTANCE_ID"
+                echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
+
+
+            - name: Describe EC2 Instance
+              run: |
+                echo "Instance ID: $INSTANCE_ID"
+
+                aws ec2 describe-instances \
+                  --instance-ids "$INSTANCE_ID" \
+                  --query 'Reservations[0].Instances[0].{State:State.Name,StateReason:StateReason,InstanceType:InstanceType,AMI:ImageId,AZ:Placement.AvailabilityZone}' \
+                  --output table
+
+                
+            - name: Wait for EC2 Instance to be running
+              run: |
+                echo "Instance ID: $INSTANCE_ID"
+                aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+                echo "EC2 Instance is now running."
+
+            - name: Associate Elastic IP
+              run: |
+                echo "Associating Elastic IP with $INSTANCE_ID"
+
+                aws ec2 associate-address \
+                  --instance-id "$INSTANCE_ID" \
+                  --allocation-id "${{ secrets.AWS_EIP_ALLOCATION_ID }}" \
+                  --allow-reassociation
+
+                echo "Elastic IP associated successfully."
+
+            - name: Get Elastic IP
+              run: |
+                ELASTIC_IP=$(aws ec2 describe-addresses \
+                  --allocation-ids "${{ secrets.AWS_EIP_ALLOCATION_ID }}" \
+                  --query 'Addresses[0].PublicIP' \
+                  --output text)
+
+                echo "Elastic IP: $ELASTIC_IP"
+                echo "ELASTIC_IP=$ELASTIC_IP" >> "$GITHUB_ENV"
+
+
+            - name: Wait for SSM registration (with visibility)
+              run: |
+                for i in $(seq 1 20); do
+                  STATUS=$(aws ssm describe-instance-information \
+                    --filters "Key=InstanceIds,Values=$INSTANCE_ID" \
+                    --query "InstanceInformationList[0].PingStatus" \
+                    --output text 2>/dev/null)
+                  echo "Attempt $i: PingStatus=$STATUS"
+                  if [ "$STATUS" == "Online" ]; then
+                    echo "Instance is online in SSM."
+                    exit 0
+                  fi
+                  sleep 10
+                done
+                echo "Instance never registered with SSM after 200s"
+                exit 1
+
+
+            - name: Get Public IP of EC2 Instance
+              id: get_public_ip
+              run: |
+                echo "Using Elastic IP: $ELASTIC_IP"
+                echo "PUBLIC_IP=$PUBLIC_IP" >> "$GITHUB_OUTPUT"
+
+
+            - name: Install CloudWatch Agent
+              shell: bash
+              run: |
+                COMMAND_ID=$(aws ssm send-command \
+                  --instance-ids "$INSTANCE_ID" \
+                  --document_name "AWS-RunShellScript" \
+                  --comment "Install CloudWatch Agent" \
+                  --parameters 'commands=[
+                    "sudo dnf install -y amazon-cloudwatch-agent"
+                  ]' \
+                  --query "Command.CommandId" \
+                  --output text)
+
+                echo "CloudWatch installation command: $COMMAND_ID"
+
+                aws ssm wait command-executed \
+                  --command-id "$COMMAND_ID" \
+                  --INSTANCE-ID "$INSTANCE_ID"
+
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}" \
+                  --output json
+
+
+
+            - name: Configure CloudWatch Agent
+              shell: bash
+              run: |
+                CONFIG=$(base64 -w 0 monitoring/cloudwatch-agent.json)
+
+                COMMAND_ID=$(aws ssm send-command \
+                  --instance-ids "$INSTANCE_ID" \
+                  --document-name "AWS-RunShellScript" \
+                  --comment "Configure CloudWatch Agent" \
+                  --parameters "commands=[
+                    \"sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc\",
+                    \"echo '$CONFIG' | base64 -d | sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json > /dev/null\"
+                  ]" \
+                  --query "Command.CommandId" \
+                  --output text)
+
+                echo "CloudWatch configuration command: $COMMAND_ID"
+
+                aws ssm wait command-executed \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$COMMAND_ID"
+
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}" \
+                  --output json
+
+
+            - name: Start CloudWatch Agent
+              shell: bash
+              run: |
+                COMMAND_ID=$(aws ssm send-command \
+                  --instance-ids "$INSTANCE_ID" \
+                  --document-name "AWS-RunShellScript" \
+                  --comment "Start CloudWatch Agent" \
+                  --parameters 'commands=[
+                    "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s"
+                  ]' \
+                  --query "Command.CommandId" \
+                  --output text)
+
+                echo "CloudWatch start command: $COMMAND_ID"
+
+                aws ssm wait command-executed \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID"
+
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}" \
+                  --output json
+
+            
+            - name: Deploy to EC2 via SSM
+              shell: bash
+              run: |
+                COMMAND_ID=$(aws ssm send-command \
+                      --instance-ids "$INSTANCE_ID" \
+                      --document-name "AWS-RunShellScript" \
+                      --comment "Deploy LMS application" \
+                      --parameters '{"commands":[
+                        "sudo dnf update -y || true",
+                        "sudo dnf install -y docker || true",
+                        "sudo systemctl start docker",
+                        "sudo systemctl enable docker",
+                        "sudo dnf install -y docker-compose-plugin || true",
+                        "sudo usermod -aG docker ec2-user",
+
+                        "if [ -d /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions ]; then cd /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions && sudo git pull origin main; else sudo git clone https://github.com/Adeife79/LMS-Application-Deployment-with-GitHub-Actions.git /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions && cd /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions; fi",
+
+                        "sudo mkdir -p /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions/logs",
+                        "sudo chmod 777 /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions/logs",
+                        
+                        "echo '\''${{ secrets.DOCKERHUB_PASSWORD }}'\'' | sudo docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin",
+                        "cd /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions && sudo docker compose pull",
+                        "cd /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions && sudo docker compose up -d"
+                      ]}' \
+                      --query "Command.CommandId" \
+                      --output text)
+
+                    echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+                    echo "Deploy command sent: $COMMAND_ID"
+
+
+            - name: Wait for deployment to finish
+              run: |
+                aws ssm wait command-executed \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID"
+
+
+            - name: Show deployment output
+              if: always()
+              run: |
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "{Status:Status,StdOut:StandardOutputContent,StdErr:StandardErrorContent}" \
+                  --output json
+
+                echo "Deployment completed."
+              

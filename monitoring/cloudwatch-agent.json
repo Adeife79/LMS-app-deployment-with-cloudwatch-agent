@@ -1,0 +1,52 @@
+{
+    "agent": {
+        "metrics_collection_interval": 60,
+        "run_as_user": "root"
+    },
+
+    "metrics": {
+        "namespace": "LMS/EC2",
+        "metrics_collected": {
+            "mem": {
+                "measurement": [
+                    "mem_used_percent"
+                ]
+            },
+
+            "disk": {
+                "measurement": [
+                    "used_percent"
+                ],
+                "resources": [
+                    "/"
+                ]
+            }
+        }
+    },
+
+    "logs": {
+        "logs_collected": {
+            "files": {
+                "collect_list": [
+                    {
+                        "file_path": "/home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions/logs/django.log",
+                        "log_group_name": "/lms/application/django",
+                        "log_stream_name": "{instance_id}"
+                    },
+
+                    {
+                        "file_path": "/home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions/logs/gunicorn-error.log",
+                        "log_group_name": "/lms/application/gunicorn-error",
+                        "log_stream_name": "{instance_id}"
+                    },
+
+                    {
+                        "file_path": "/home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions/logs/gunicorn-access.log",
+                        "log_group_name": "/lms/application/gunicorn-access",
+                        "log_stream_name": "{instance_id}"
+                    }
+                ]
+            }
+        }
+    }
+}
