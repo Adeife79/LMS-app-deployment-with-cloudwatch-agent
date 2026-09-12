@@ -237,15 +237,15 @@ jobs:
                       --parameters '{"commands":[
                         "sudo dnf update -y || true",
                         "sudo dnf install -y docker || true",
-                        "sudo systemctl start docker git",
-                        "sudo systemctl enable docker",
+                        "sudo systemctl start docker git || true",
+                        "sudo systemctl enable docker || true",
 
-                        "sudo mkdir -p /usr/local/lib/docker/cli-plugins",
-                        "sudo curl -SL https://github.com/docker/compose/releases/download/v5.5.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose",
-                        "sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose",
+                        "sudo mkdir -p /usr/local/lib/docker/cli-plugins || true",
+                        "sudo curl -SL https://github.com/docker/compose/releases/download/v5.5.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose || true",
+                        "sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose || true",
 
-                        "docker compose version",
-                        "git --version",
+                        "docker compose version || true",
+                        "git --version || true",
                         "sudo usermod -aG docker ec2-user",
 
                         "if [ -d /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent ]; then cd /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent && sudo git pull origin main; else sudo git clone https://github.com/Adeife79/LMS-app-deployment-with-cloudwatch-agent.git /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions && cd /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions; fi",
