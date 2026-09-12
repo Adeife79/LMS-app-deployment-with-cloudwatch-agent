@@ -235,9 +235,9 @@ jobs:
                       --document-name "AWS-RunShellScript" \
                       --comment "Deploy LMS application" \
                       --parameters '{"commands":[
-                        "sudo dnf update -y || true",
-                        "sudo dnf install -y docker || true",
-                        "sudo systemctl start docker git || true",
+                        "sudo dnf update -y 2>/dev/null",
+                        "sudo dnf install -y docker git 2>/dev/null",
+                        "sudo systemctl start docker || true",
                         "sudo systemctl enable docker || true",
 
                         "sudo mkdir -p /usr/local/lib/docker/cli-plugins || true",
