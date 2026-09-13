@@ -248,7 +248,7 @@ jobs:
                         "git --version || true",
                         "sudo usermod -aG docker ec2-user",
 
-                        "if [ -d /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent ]; then cd /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent && sudo git pull origin main; else sudo git clone https://github.com/Adeife79/LMS-app-deployment-with-cloudwatch-agent.git /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions && cd /home/ec2-user/LMS-Application-Deployment-with-GitHub-Actions; fi",
+                        "if [ -d /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent ]; then cd /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent && sudo git pull origin main; else sudo git clone https://github.com/Adeife79/LMS-app-deployment-with-cloudwatch-agent.git /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent && cd /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent; fi",
 
                         "sudo mkdir -p /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent/logs",
                         "sudo chmod 777 /home/ec2-user/LMS-app-deployment-with-cloudwatch-agent/logs",
