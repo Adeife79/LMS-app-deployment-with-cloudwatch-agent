@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "lms-backend"
+    metrics_path: "/metrics"
+
+    ec2_sd_configs:
+      - region: eu-north-1
+        port: 8009
+    
+    relabel_configs:
+      - source_labels: [__meta_ec2_tag_Monitoring]
+        regex: prometheus
+        action: keep
+
+      - source_labels: [__meta_ec2_private_ip]
+        target_label: instance

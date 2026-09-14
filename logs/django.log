@@ -1,0 +1,4 @@
+WARNING 2026-09-13 01:00:46,871 log Unauthorized: /api/courses/
+WARNING 2026-09-13 01:00:46,879 log Unauthorized: /api/categories/
+WARNING 2026-09-13 01:00:46,905 log Unauthorized: /api/categories/
+WARNING 2026-09-13 01:00:46,908 log Unauthorized: /api/courses/
