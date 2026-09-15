@@ -35,3 +35,7 @@
 [2026-09-14 16:10:38 +0000] [1] [INFO] Using worker: sync
 [2026-09-14 16:10:47 +0000] [7] [INFO] Booting worker with pid: 7
 [2026-09-14 16:10:48 +0000] [8] [INFO] Booting worker with pid: 8
+[2026-09-15 09:51:55 +0000] [1] [INFO] Handling signal: term
+[2026-09-15 09:51:55 +0000] [8] [INFO] Worker exiting (pid: 8)
+[2026-09-15 09:51:55 +0000] [7] [INFO] Worker exiting (pid: 7)
+[2026-09-15 09:51:58 +0000] [1] [INFO] Shutting down: Master

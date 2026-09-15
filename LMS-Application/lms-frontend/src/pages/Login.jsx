@@ -15,7 +15,7 @@ const Login = () => {
     e.preventDefault();
     setError('');
     try {
-      const res = await axios.post('http://127.0.0.1:8009/api/token/', form);
+      const res = await axios.post('http://16.170.129.203:8009/api/token/', form);
       localStorage.setItem('access', res.data.access);
       localStorage.setItem('refresh', res.data.refresh);
       navigate('/');
