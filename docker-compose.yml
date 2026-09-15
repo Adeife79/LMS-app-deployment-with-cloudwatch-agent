@@ -2,6 +2,7 @@ services:
   lms-frontend:
     image: adeife08/lms-frontend:v3
     container_name: lms-frontend-container
+    restart: unless-stopped
     ports:
       - "5173:5173"
     depends_on:
@@ -10,6 +11,7 @@ services:
   lms-backend:
     image: adeife08/lms-backend:v3
     container_name: lms-backend-container
+    restart: unless-stopped
     ports:
       - "8009:8000"
     depends_on:
@@ -29,6 +31,7 @@ services:
       POSTGRES_DB: lms_db
       POSTGRES_USER: lms_user
       POSTGRES_PASSWORD: lms_password
+    restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
