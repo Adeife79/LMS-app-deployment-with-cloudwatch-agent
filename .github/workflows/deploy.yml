@@ -422,14 +422,11 @@ jobs:
 
             echo "Monitoring setup command: $COMMAND_ID"
 
-        - name: Wait for deployment to finish
-          run: |
             aws ssm wait command-executed \
               --command-id "$COMMAND_ID" \
               --instance-id "$INSTANCE_ID"
-
-
-        - name: Show deployment output
+          
+        - name: Show monitoring deployment output
           if: always()
           run: |
             aws ssm get-command-invocation \
