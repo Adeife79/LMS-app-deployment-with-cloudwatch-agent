@@ -1,13 +1,12 @@
 name: Application Deployment
 
 on:
-  workflow_dispatch
-#  workflow_run:
-#        workflows: ["Continuous Integration"]
-#        types:
-#            - completed
-#        branches:
-#            - main
+  workflow_run:
+        workflows: ["Continuous Integration"]
+        types:
+            - completed
+        branches:
+            - main
 
 env:
     AWS_REGION: eu-north-1
